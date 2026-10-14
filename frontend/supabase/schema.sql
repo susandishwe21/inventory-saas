@@ -18,3 +18,11 @@ create policy "dev: anyone can read products"
 create policy "dev: anyone can add products"
   on products for insert
   with check (true);
+
+create policy "dev: anyone can update products"
+  on products for update
+  using (true) with check (true);
+
+create policy "dev: anyone can delete products"
+  on products for delete
+  using (true);

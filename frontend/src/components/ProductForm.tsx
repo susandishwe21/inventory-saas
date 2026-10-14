@@ -1,8 +1,9 @@
 import { useState, type SubmitEvent } from 'react';
-import type { ProductInput } from '../types';
+import type { Product, ProductInput } from '../types';
 
 // Define the props for the ProductForm component
 type Props = {
+  initial?: Product; // For Update product 
   onSave: (input: ProductInput) => Promise<void>;
   onCancel: () => void;
 };
@@ -22,13 +23,15 @@ export function ProductForm({ onSave, onCancel }: Props) {
     const priceNum = Number(price);
     if (!name.trim() || !sku.trim()) return setError('Name and SKU are required.');
     if (Number.isNaN(priceNum) || priceNum < 0) return setError('Price must be 0 or more.');
-
+    if (Number.isNaN(Number(stockQuantity)) || Number(stockQuantity) < 0) return setError('Stock quantity must be 0 or more.');
+    
     setSaving(true);
     try {
       await onSave({
         name: name.trim(),
         sku: sku.trim().toUpperCase(),
         price: priceNum,
+        stock_quantity: Number(stockQuantity),
       });
     } catch (err) {
       setError((err as Error).message);

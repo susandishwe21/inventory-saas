@@ -12,4 +12,5 @@ export type ProductInput = {
   name: string;
   sku: string;
   price: number;
+  stock_quantity: number;
 };
