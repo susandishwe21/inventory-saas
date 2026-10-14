@@ -1,4 +1,4 @@
-# Create products table
+//Create products table
 create table products (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
@@ -7,3 +7,14 @@ create table products (
   stock_quantity integer not null default 0 check (stock_quantity >= 0),
   created_at timestamptz not null default now()
 );
+
+// Enable row level security
+alter table products enable row level security;
+
+create policy "dev: anyone can read products"
+  on products for select
+  using (true);
+
+create policy "dev: anyone can add products"
+  on products for insert
+  with check (true);
