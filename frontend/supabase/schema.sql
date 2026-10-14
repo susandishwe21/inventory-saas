@@ -26,3 +26,17 @@ create policy "dev: anyone can update products"
 create policy "dev: anyone can delete products"
   on products for delete
   using (true);
+
+
+
+create type movement_type as enum ('in', 'out', 'adjustment');
+
+create table stock_movements (
+  id         uuid primary key default gen_random_uuid(),
+  product_id uuid not null references products(id) on delete cascade,
+  type       movement_type not null,
+  quantity   integer not null check (quantity <> 0),
+  note       text,
+  created_at timestamptz not null default now(),
+  check (type = 'adjustment' or quantity > 0)
+);

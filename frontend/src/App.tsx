@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ProductForm } from './components/ProductForm';
+import { StockPanel } from './components/StockPanel';
 import { createProduct, deleteProduct, listProducts, updateProduct } from './services/products';
 import type { Product, ProductInput } from './types';
 
@@ -9,8 +10,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [stockProductId, setStockProductId] = useState<string | null>(null);
 
-  // Load products from the database
   const load = useCallback(async () => {
     try {
       setError(null);
@@ -26,12 +27,14 @@ export default function App() {
     load();
   }, [load]);
 
-  function openAdd(){
+  function openAdd() {
+    setStockProductId(null);
     setEditing(null);
     setShowForm(true);
   }
 
   function openEdit(p: Product) {
+    setStockProductId(null);
     setEditing(p);
     setShowForm(true);
   }
@@ -41,24 +44,32 @@ export default function App() {
     setShowForm(false);
   }
 
-  // Handle saving a new product
+  function openStock(p: Product) {
+    closeForm();
+    setStockProductId(p.id);
+  }
+
   async function handleSave(input: ProductInput) {
-    await createProduct(input);
-    setShowForm(false);
+    if (editing) await updateProduct(editing.id, input);
+    else await createProduct(input);
+    closeForm();
     await load();
   }
 
   async function handleDelete(p: Product) {
-    if (!confirm(`Delete "${p.name}"?`)) return;
+    if (!confirm(`Delete "${p.name}"? Its stock history will also be deleted.`)) return;
     try {
       await deleteProduct(p.id);
       if (editing?.id === p.id) closeForm();
+      if (stockProductId === p.id) setStockProductId(null);
       await load();
     } catch (e) {
       setError((e as Error).message);
     }
   }
 
+  // id နဲ့ list ထဲက နောက်ဆုံး data ကို ရှာတယ်
+  const stockProduct = products.find((p) => p.id === stockProductId);
 
   if (loading) return <p>Loading…</p>;
 
@@ -73,6 +84,15 @@ export default function App() {
           initial={editing ?? undefined}
           onSave={handleSave}
           onCancel={closeForm}
+        />
+      )}
+
+      {stockProduct && (
+        <StockPanel
+          key={stockProduct.id}
+          product={stockProduct}
+          onChanged={load}
+          onClose={() => setStockProductId(null)}
         />
       )}
 
@@ -94,8 +114,13 @@ export default function App() {
               <td>{p.name}</td>
               <td>{p.sku}</td>
               <td>{p.price.toFixed(2)}</td>
-              <td>{p.stock_quantity}</td>
               <td>
+                {p.stock_quantity === 0
+                  ? <span style={{ color: 'red', fontWeight: 600 }}>Sold out</span>
+                  : p.stock_quantity}
+              </td>
+              <td>
+                <button onClick={() => openStock(p)}>Stock</button>{' '}
                 <button onClick={() => openEdit(p)}>Edit</button>{' '}
                 <button onClick={() => handleDelete(p)}>Delete</button>
               </td>

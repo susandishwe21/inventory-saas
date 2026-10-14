@@ -1,7 +1,7 @@
 // Call the supabase client (database)
 
 import { supabase } from '../lib/supabase';
-import type { Product, ProductInput } from '../types';
+import type { Product, ProductInput, StockMovement, StockMovementInput } from '../types';
 
 // Handle database errors and return user-friendly messages
 function friendlyError(error: { code?: string; message: string }): Error {
@@ -41,4 +41,21 @@ export async function updateProduct(id: string, input: ProductInput): Promise<vo
 export async function deleteProduct(id: string): Promise<void> {
   const { error } = await supabase.from('products').delete().eq('id', id);
   if (error) throw friendlyError(error);
+}
+// Define the types for stock movements
+export async function addStockMovement(input: StockMovementInput): Promise<void> {
+  const { error } = await supabase.from('stock_movements').insert(input);
+  if (error) throw friendlyError(error);
+}
+
+// List stock movements for a specific product
+export async function listMovements(productId: string): Promise<StockMovement[]> {
+  const { data, error } = await supabase
+    .from('stock_movements')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw friendlyError(error);
+  return data ?? [];
 }
