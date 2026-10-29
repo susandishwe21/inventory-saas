@@ -2,7 +2,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { Category, CategoryWithCount } from '../types';
-import { friendlyError } from './errors';
+import { friendlyError, requireChanged } from './errors';
 
 const DUPLICATE = 'A category with this name already exists.';
 
@@ -26,12 +26,14 @@ export async function createCategory(name: string): Promise<void> {
 }
 
 export async function renameCategory(id: string, name: string): Promise<void> {
-  const { error } = await supabase.from('categories').update({ name }).eq('id', id);
+  const { data, error } = await supabase.from('categories').update({ name }).eq('id', id).select('id');
   if (error) throw friendlyError(error, DUPLICATE);
+  requireChanged(data);
 }
 
 // Products in this category are kept; the database sets their category_id to null
 export async function deleteCategory(id: string): Promise<void> {
-  const { error } = await supabase.from('categories').delete().eq('id', id);
+  const { data, error } = await supabase.from('categories').delete().eq('id', id).select('id');
   if (error) throw friendlyError(error);
+  requireChanged(data);
 }

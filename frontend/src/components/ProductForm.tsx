@@ -24,6 +24,8 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
+  const [costPrice, setCostPrice] = useState(initial ? String(initial.cost_price) : '');
+  const [lowStockLevel, setLowStockLevel] = useState(initial ? String(initial.low_stock_level) : '10');
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '');
   const [categories, setCategories] = useState<Category[]>([]);
   const [imageChange, setImageChange] = useState<ImageChange>({ type: 'keep' });
@@ -84,13 +86,21 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
     setError(null);
 
     const priceNum = Number(price);
+    const costNum = Number(costPrice); // empty = 0
+    const levelNum = Number(lowStockLevel);
     if (!name.trim() || !sku.trim()) return setError('Name and SKU are required.');
-    if (Number.isNaN(priceNum) || priceNum < 0) return setError('Price must be 0 or more.');
+    if (Number.isNaN(priceNum) || priceNum < 0) return setError('Selling price must be 0 or more.');
+    if (Number.isNaN(costNum) || costNum < 0) return setError('Cost price must be 0 or more.');
+    if (lowStockLevel.trim() === '' || !Number.isInteger(levelNum) || levelNum < 0) {
+      return setError('Low-stock level must be a whole number, 0 or more.');
+    }
 
     const input: ProductInput = {
       name: name.trim(),
       sku: sku.trim().toUpperCase(),
       price: priceNum,
+      cost_price: costNum,
+      low_stock_level: levelNum,
       category_id: categoryId || null, // '' = "No category"
     };
 
@@ -154,8 +164,18 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
           )}
         </label>
         <label>
-          <span className="label">Price</span>
+          <span className="label">Selling price</span>
           <input className="input" placeholder="0.00" type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </label>
+        <label>
+          <span className="label">Cost price</span>
+          <input className="input" placeholder="0.00" type="number" step="0.01" min="0" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} />
+          <span className="mt-1 block text-xs text-slate-500">What you paid for one item. Used for stock value.</span>
+        </label>
+        <label>
+          <span className="label">Low-stock level</span>
+          <input className="input" type="number" step="1" min="0" value={lowStockLevel} onChange={(e) => setLowStockLevel(e.target.value)} />
+          <span className="mt-1 block text-xs text-slate-500">Shown as "Low stock" when stock is at or below this number.</span>
         </label>
       </div>
 

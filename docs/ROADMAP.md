@@ -103,7 +103,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** The owner generates a code, a second user joins with it, and that user sees the owner's products. A used or expired code is rejected. After removal, the staff user is sent back to onboarding.
 
-## Phase 7 — Role enforcement (owner / staff)
+## Phase 7 — Role enforcement (owner / staff) ✅
+
+*Done. Catalog policies are named `owners: …` and add `is_owner()`; storage upload/update/delete for product images also require `is_owner()`. Services check the rows returned by update/delete (`requireChanged`), because RLS silently changes 0 rows instead of raising an error. `RequireOwner` guards `/settings`.*
 
 **Goal:** Staff can work with stock but can't change the catalog or members.
 
@@ -112,7 +114,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** As staff, the buttons are hidden, **and** calling the service functions directly (e.g. from the browser console) is rejected by RLS. As staff, recording a stock movement still works.
 
-## Phase 8 — Cost price, low-stock level, and status pills
+## Phase 8 — Cost price, low-stock level, and status pills ✅
+
+*Done. Columns are added with `alter table … add column if not exists` (section 3 of `schema.sql`) and both editable columns are in the products column grant. `status` is `text` (`'in' | 'low' | 'out'`). The price field is now labelled "Selling price". `seed.sql` has cost prices and fills them in for sample products that still have 0.*
 
 **Goal:** Each product has a stock status.
 
@@ -121,7 +125,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** Moving stock across the threshold with movements changes the pill (e.g. level 10: stock 11 → `in`, 10 → `low`, 0 → `out`).
 
-## Phase 9 — Dashboard summary
+## Phase 9 — Dashboard summary ✅
+
+*Done. `dashboard_summary()` is section 9 of `schema.sql`; it returns one row (zeros for an empty shop) and the app reads it with `.rpc(...).single()`. The status bar's segment widths use an inline `style={{ width }}` because they are data-driven (the one allowed exception to the Phase 1 "no inline style" rule). Bar colors match the status pills.*
 
 **Goal:** See the state of the shop at a glance.
 

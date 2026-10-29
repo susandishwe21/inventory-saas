@@ -7,3 +7,12 @@ export function friendlyError(
   if (error.code === '42501') return new Error("You don't have permission to make this change."); // RLS or column privileges
   return new Error(error.message);
 }
+
+// RLS doesn't report an error when it blocks an update or delete: it just changes 0 rows.
+// Call this with the rows returned by .select() after update() / delete().
+export function requireChanged(
+  rows: unknown[] | null,
+  message = 'Nothing was changed. Only the shop owner can do this, or it was already deleted.',
+): void {
+  if (!rows || rows.length === 0) throw new Error(message);
+}

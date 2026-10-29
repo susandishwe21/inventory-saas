@@ -2,7 +2,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { ImageChange, Product, ProductInput, StockMovement, StockMovementInput } from '../types';
-import { friendlyError } from './errors';
+import { friendlyError, requireChanged } from './errors';
 import { deleteProductImage, uploadProductImage } from './productImages';
 
 const DUPLICATE_SKU = 'This SKU already exists.';
@@ -39,7 +39,8 @@ export async function listProducts(page: number, pageSize: number, category: Cat
   if (error) throw friendlyError(error);
 
   return {
-    products: (data as unknown as Product[] ?? []).map((p) => ({ ...p, price: Number(p.price) })),
+    // numeric columns arrive as strings, so turn them into numbers
+    products: (data as unknown as Product[] ?? []).map((p) => ({ ...p, price: Number(p.price), cost_price: Number(p.cost_price) })),
     total: count ?? 0,
   };
 }
@@ -68,10 +69,13 @@ export async function setProductImage(product: ProductImageTarget, change: Image
 
   const oldPath = product.image_path;
   const newPath = change.type === 'set' ? await uploadProductImage(product.org_id, product.id, change.image) : null;
-  const { error } = await supabase.from('products').update({ image_path: newPath }).eq('id', product.id);
-  if (error) {
+  const { data, error } = await supabase.from('products').update({ image_path: newPath }).eq('id', product.id).select('id');
+  try {
+    if (error) throw friendlyError(error);
+    requireChanged(data);
+  } catch (e) {
     if (newPath) await deleteProductImage(newPath).catch(() => {}); // undo the upload
-    throw friendlyError(error);
+    throw e;
   }
   // The product already points to the new image; if deleting the old file fails, it's only a leftover file
   if (oldPath) await deleteProductImage(oldPath).catch(() => {});
@@ -79,15 +83,17 @@ export async function setProductImage(product: ProductImageTarget, change: Image
 
 // Update an existing product in the database
 export async function updateProduct(id: string, input: ProductInput): Promise<void> {
-  const { error } = await supabase.from('products').update(input).eq('id', id);
+  const { data, error } = await supabase.from('products').update(input).eq('id', id).select('id');
   if (error) throw friendlyError(error, DUPLICATE_SKU);
+  requireChanged(data);
 }
 
 // Delete a product from the database, then its image file
 export async function deleteProduct(id: string): Promise<void> {
   const { data, error } = await supabase.from('products').delete().eq('id', id).select('image_path');
   if (error) throw friendlyError(error);
-  const imagePath = data?.[0]?.image_path as string | null | undefined;
+  requireChanged(data);
+  const imagePath = data[0].image_path as string | null;
   if (imagePath) await deleteProductImage(imagePath).catch(() => {}); // product is gone either way
 }
 // Record a stock movement. The database trigger applies it to products.stock_quantity.

@@ -2,7 +2,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { Member, OrgInvite } from '../types';
-import { friendlyError } from './errors';
+import { friendlyError, requireChanged } from './errors';
 
 // Everyone in the shop, oldest first (RLS returns only the current shop's members)
 export async function listMembers(): Promise<Member[]> {
@@ -18,8 +18,7 @@ export async function listMembers(): Promise<Member[]> {
 export async function removeMember(userId: string): Promise<void> {
   const { data, error } = await supabase.from('memberships').delete().eq('user_id', userId).select('user_id');
   if (error) throw friendlyError(error);
-  // RLS doesn't report an error when it blocks a delete; it just deletes nothing
-  if (data.length === 0) throw new Error('Could not remove this member. Only the owner can remove staff.');
+  requireChanged(data, 'Could not remove this member. Only the owner can remove staff.');
 }
 
 // Owners only: a new single-use code, valid for 7 days

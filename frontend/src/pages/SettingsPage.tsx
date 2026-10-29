@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { createInvite, listInvites, listMembers, removeMember } from '../services/members';
-import { useShop } from '../shop/ShopContext';
+import { useRole, useShop } from '../shop/ShopContext';
 import type { Member, OrgInvite } from '../types';
 
 // Codes are stored as 8 characters and shown as XXXX-XXXX so they are easier to read out
@@ -22,7 +22,7 @@ async function loadAll(isOwner: boolean) {
 export function SettingsPage() {
   const { session } = useAuth();
   const { shop } = useShop();
-  const isOwner = shop?.role === 'owner'; // Phase 7 adds a proper role check (hook + RLS)
+  const { isOwner } = useRole(); // staff never get here (RequireOwner), but the database checks too
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<OrgInvite[]>([]);

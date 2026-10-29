@@ -9,14 +9,20 @@ export type CategoryWithCount = Category & {
   product_count: number;
 };
 
+// Calculated by the database: out = 0, low = at or below low_stock_level, otherwise in
+export type StockStatus = 'in' | 'low' | 'out';
+
 // Define the Product type
 export type Product = {
   id: string;
   org_id: string; // the shop it belongs to
   name: string;
   sku: string;
-  price: number;
+  price: number; // selling price
+  cost_price: number; // what the shop paid
   stock_quantity: number; // read only: changes through stock movements (database trigger)
+  low_stock_level: number; // status is "low" at or below this
+  status: StockStatus; // read only: generated column
   category_id: string | null;
   category: Pick<Category, 'id' | 'name'> | null; // joined from categories when listing
   image_path: string | null; // file path in the "product-images" storage bucket
@@ -33,6 +39,8 @@ export type ProductInput = {
   name: string;
   sku: string;
   price: number;
+  cost_price: number;
+  low_stock_level: number;
   category_id: string | null;
 };
 
@@ -90,4 +98,13 @@ export type OrgInvite = {
   expires_at: string;
   used_by: string | null;
   used_at: string | null; // null = not used yet
+};
+
+// One row from dashboard_summary(): the whole shop at a glance
+export type DashboardSummary = {
+  stock_value: number; // sum of cost_price × stock_quantity
+  total_products: number;
+  in_stock: number;
+  low_stock: number;
+  out_of_stock: number;
 };

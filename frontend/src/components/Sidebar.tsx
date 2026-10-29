@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { signOut } from '../services/auth';
-import { useShop } from '../shop/ShopContext';
+import { useRole, useShop } from '../shop/ShopContext';
 import { Icon, type IconName } from './icons';
 
 type NavItem = { to: string; label: string; icon: IconName };
@@ -33,6 +33,7 @@ type Props = {
 
 export function Sidebar({ onNavigate }: Props) {
   const { shop } = useShop();
+  const { isOwner } = useRole();
 
   return (
     <nav className="flex h-full flex-col gap-6 overflow-y-auto border-r border-slate-200 bg-white px-4 py-5">
@@ -62,7 +63,7 @@ export function Sidebar({ onNavigate }: Props) {
       ))}
 
       <div className="mt-auto space-y-0.5 border-t border-slate-100 pt-4">
-        <SidebarLink item={{ to: '/settings', label: 'Settings', icon: 'settings' }} onNavigate={onNavigate} />
+        {isOwner && <SidebarLink item={{ to: '/settings', label: 'Settings', icon: 'settings' }} onNavigate={onNavigate} />}
         <UserMenu />
       </div>
     </nav>

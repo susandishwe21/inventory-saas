@@ -12,6 +12,7 @@
 --   6. Row level security policies
 --   7. Product images (storage bucket)
 --   8. Invite codes and members (staff join a shop with a code; owners remove staff)
+--   9. Dashboard summary
 
 
 -- =====================================================================
@@ -122,6 +123,23 @@ create table if not exists products (
   foreign key (category_id, org_id) references categories (id, org_id) on delete set null (category_id)
 );
 create index if not exists products_org_name_idx    on products (org_id, name); -- list + pagination, ordered by name
+
+-- Phase 8: cost price, low-stock level and stock status.
+-- "add column if not exists" so this also works on a database created before Phase 8.
+alter table products add column if not exists
+  cost_price numeric(12, 2) not null default 0 check (cost_price >= 0); -- what the shop paid; stock value = cost_price × stock_quantity
+alter table products add column if not exists
+  low_stock_level integer not null default 10 check (low_stock_level >= 0); -- "low" when stock is at or below this
+-- Calculated by the database on every insert/update (also when the stock trigger changes stock_quantity).
+-- Nobody can write it; the app can filter on it.
+alter table products add column if not exists
+  status text generated always as (
+    case
+      when stock_quantity = 0 then 'out'
+      when stock_quantity <= low_stock_level then 'low'
+      else 'in'
+    end
+  ) stored;
 create index if not exists products_category_id_idx on products (category_id);
 
 
@@ -179,14 +197,14 @@ revoke insert, update on products        from anon, authenticated;
 revoke insert, update on stock_movements from anon, authenticated;
 
 grant insert (name), update (name) on categories to authenticated;
-grant insert (name, sku, price, category_id, image_path),
-      update (name, sku, price, category_id, image_path) on products to authenticated;
+grant insert (name, sku, price, cost_price, low_stock_level, category_id, image_path),
+      update (name, sku, price, cost_price, low_stock_level, category_id, image_path) on products to authenticated;
 grant insert (product_id, type, quantity, note) on stock_movements to authenticated; -- no update: audit log
 
 
 -- =====================================================================
--- 6. Row level security: every member sees and changes only their own shop's rows.
--- Phase 7 limits insert/update/delete on products and categories to owners.
+-- 6. Row level security: every member sees only their own shop's rows.
+-- Owners change the catalog (products, categories); every member records stock movements.
 -- =====================================================================
 
 alter table organizations   enable row level security;
@@ -205,27 +223,40 @@ drop policy if exists "members: read memberships in own shop" on memberships;
 create policy "members: read memberships in own shop" on memberships
   for select to authenticated using (org_id = current_org_id());
 
-drop policy if exists "members: read categories"   on categories;
+-- Older policies from Phase 5 (any member could change the catalog)
 drop policy if exists "members: add categories"    on categories;
 drop policy if exists "members: update categories" on categories;
 drop policy if exists "members: delete categories" on categories;
-create policy "members: read categories"   on categories for select to authenticated using (org_id = current_org_id());
-create policy "members: add categories"    on categories for insert to authenticated with check (org_id = current_org_id());
-create policy "members: update categories" on categories for update to authenticated
-  using (org_id = current_org_id()) with check (org_id = current_org_id());
-create policy "members: delete categories" on categories for delete to authenticated using (org_id = current_org_id());
+drop policy if exists "members: add products"      on products;
+drop policy if exists "members: update products"   on products;
+drop policy if exists "members: delete products"   on products;
 
-drop policy if exists "members: read products"   on products;
-drop policy if exists "members: add products"    on products;
-drop policy if exists "members: update products" on products;
-drop policy if exists "members: delete products" on products;
-create policy "members: read products"   on products for select to authenticated using (org_id = current_org_id());
-create policy "members: add products"    on products for insert to authenticated with check (org_id = current_org_id());
-create policy "members: update products" on products for update to authenticated
-  using (org_id = current_org_id()) with check (org_id = current_org_id());
-create policy "members: delete products" on products for delete to authenticated using (org_id = current_org_id());
+-- Categories and products: every member reads, only owners add / change / delete
+drop policy if exists "members: read categories"  on categories;
+drop policy if exists "owners: add categories"    on categories;
+drop policy if exists "owners: update categories" on categories;
+drop policy if exists "owners: delete categories" on categories;
+create policy "members: read categories"  on categories for select to authenticated using (org_id = current_org_id());
+create policy "owners: add categories"    on categories for insert to authenticated
+  with check (org_id = current_org_id() and is_owner());
+create policy "owners: update categories" on categories for update to authenticated
+  using (org_id = current_org_id() and is_owner()) with check (org_id = current_org_id() and is_owner());
+create policy "owners: delete categories" on categories for delete to authenticated
+  using (org_id = current_org_id() and is_owner());
 
--- Movements: read and add only
+drop policy if exists "members: read products"  on products;
+drop policy if exists "owners: add products"    on products;
+drop policy if exists "owners: update products" on products;
+drop policy if exists "owners: delete products" on products;
+create policy "members: read products"  on products for select to authenticated using (org_id = current_org_id());
+create policy "owners: add products"    on products for insert to authenticated
+  with check (org_id = current_org_id() and is_owner());
+create policy "owners: update products" on products for update to authenticated
+  using (org_id = current_org_id() and is_owner()) with check (org_id = current_org_id() and is_owner());
+create policy "owners: delete products" on products for delete to authenticated
+  using (org_id = current_org_id() and is_owner());
+
+-- Movements: read and add only, for every member (staff record stock too)
 drop policy if exists "members: read movements" on stock_movements;
 drop policy if exists "members: add movements"  on stock_movements;
 create policy "members: read movements" on stock_movements for select to authenticated using (org_id = current_org_id());
@@ -235,7 +266,7 @@ create policy "members: add movements"  on stock_movements for insert to authent
 -- =====================================================================
 -- 7. Product images: public bucket, one folder per shop: "<org_id>/<product_id>/<random>.webp".
 -- Anyone with the URL can view a picture (public bucket, no policy needed for that).
--- A member can only list, upload and delete files in their own shop's folder. Phase 7: owners only.
+-- Members can list their own shop's folder; only owners upload, replace and delete files there.
 -- =====================================================================
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -254,19 +285,24 @@ drop policy if exists "signed in: upload product images" on storage.objects;
 drop policy if exists "signed in: update product images" on storage.objects;
 drop policy if exists "signed in: delete product images" on storage.objects;
 
-drop policy if exists "members: read own product images"   on storage.objects;
+-- Older policies from Phase 5 (any member could upload / delete)
 drop policy if exists "members: upload own product images" on storage.objects;
 drop policy if exists "members: update own product images" on storage.objects;
 drop policy if exists "members: delete own product images" on storage.objects;
+
+drop policy if exists "members: read own product images"  on storage.objects;
+drop policy if exists "owners: upload own product images" on storage.objects;
+drop policy if exists "owners: update own product images" on storage.objects;
+drop policy if exists "owners: delete own product images" on storage.objects;
 create policy "members: read own product images" on storage.objects for select to authenticated
   using (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text);
-create policy "members: upload own product images" on storage.objects for insert to authenticated
-  with check (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text);
-create policy "members: update own product images" on storage.objects for update to authenticated
-  using (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text)
-  with check (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text);
-create policy "members: delete own product images" on storage.objects for delete to authenticated
-  using (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text);
+create policy "owners: upload own product images" on storage.objects for insert to authenticated
+  with check (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text and is_owner());
+create policy "owners: update own product images" on storage.objects for update to authenticated
+  using (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text and is_owner())
+  with check (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text and is_owner());
+create policy "owners: delete own product images" on storage.objects for delete to authenticated
+  using (bucket_id = 'product-images' and (storage.foldername(name))[1] = current_org_id()::text and is_owner());
 
 
 -- =====================================================================
@@ -365,3 +401,32 @@ create policy "owners: read own shop invites" on org_invites
 drop policy if exists "owners: remove staff" on memberships;
 create policy "owners: remove staff" on memberships
   for delete to authenticated using (org_id = current_org_id() and is_owner() and role = 'staff');
+
+
+-- =====================================================================
+-- 9. Dashboard summary: stock value and how many products are in / low / out of stock.
+-- =====================================================================
+
+-- "security invoker" (not definer): runs as the user who calls it, so RLS on products still applies
+-- and every shop only counts its own products. Always returns one row (zeros for an empty shop).
+create or replace function dashboard_summary()
+returns table (
+  stock_value    numeric, -- sum of cost_price × stock_quantity
+  total_products integer,
+  in_stock       integer,
+  low_stock      integer,
+  out_of_stock   integer
+)
+language sql stable security invoker set search_path = ''
+as $$
+  select
+    coalesce(sum(cost_price * stock_quantity), 0),
+    count(*)::integer,
+    (count(*) filter (where status = 'in'))::integer,
+    (count(*) filter (where status = 'low'))::integer,
+    (count(*) filter (where status = 'out'))::integer
+  from public.products
+$$;
+
+revoke execute on function dashboard_summary() from public, anon;
+grant  execute on function dashboard_summary() to authenticated;

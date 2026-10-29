@@ -3,9 +3,11 @@ import { Navigate, useSearchParams } from 'react-router';
 import { Pagination } from '../components/Pagination';
 import { ProductForm } from '../components/ProductForm';
 import { StockPanel } from '../components/StockPanel';
+import { StockStatusPill } from '../components/StockStatusPill';
 import { listCategories } from '../services/categories';
 import { ProductImage } from '../components/ProductImage';
 import { productImageUrl } from '../services/productImages';
+import { useRole } from '../shop/ShopContext';
 import { createProduct, deleteProduct, listProducts, setProductImage, UNCATEGORIZED, updateProduct } from '../services/products';
 import type { Category, ImageChange, Product, ProductInput } from '../types';
 
@@ -19,6 +21,7 @@ function parsePage(raw: string | null): number {
 
 export function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isOwner } = useRole(); // staff only record stock; owners also add / edit / delete
   const page = parsePage(searchParams.get('page'));
   const category = searchParams.get('category'); // null = all, 'none' = uncategorized, otherwise a category id
   const query = `${page}|${category}`; // what is being shown: page + filter
@@ -191,7 +194,7 @@ export function ProductsPage() {
               : 'in your inventory'}
           </p>
         </div>
-        {!showForm && (
+        {isOwner && !showForm && (
           <button className="btn btn-primary" onClick={openAdd}>
             <span aria-hidden>+</span> Add product
           </button>
@@ -248,13 +251,14 @@ export function ProductsPage() {
                   <th className="px-4 py-3">Category</th>
                   <th className="px-4 py-3 text-right">Price</th>
                   <th className="px-4 py-3 text-right">Stock</th>
+                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {total === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
                       {category ? (
                         <>
                           No products in this category.{' '}
@@ -263,7 +267,9 @@ export function ProductsPage() {
                           </button>
                         </>
                       ) : (
-                        <>No products yet. Click <span className="font-medium text-slate-700">Add product</span> to create your first one.</>
+                        isOwner
+                          ? <>No products yet. Click <span className="font-medium text-slate-700">Add product</span> to create your first one.</>
+                          : <>No products yet. The shop owner adds products.</>
                       )}
                     </td>
                   </tr>
@@ -283,15 +289,18 @@ export function ProductsPage() {
                       {p.category ? p.category.name : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{p.price.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {p.stock_quantity === 0
-                        ? <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/20 ring-inset">Sold out</span>
-                        : p.stock_quantity}
+                    <td className="px-4 py-3 text-right tabular-nums">{p.stock_quantity}</td>
+                    <td className="px-4 py-3">
+                      <StockStatusPill status={p.status} />
                     </td>
                     <td className="px-4 py-2 text-right whitespace-nowrap">
                       <button className="btn btn-ghost" onClick={() => openStock(p)}>Stock</button>
-                      <button className="btn btn-ghost" onClick={() => openEdit(p)}>Edit</button>
-                      <button className="btn btn-danger" onClick={() => handleDelete(p)}>Delete</button>
+                      {isOwner && (
+                        <>
+                          <button className="btn btn-ghost" onClick={() => openEdit(p)}>Edit</button>
+                          <button className="btn btn-danger" onClick={() => handleDelete(p)}>Delete</button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -2,6 +2,7 @@ import { useEffect, useState, type SubmitEvent } from 'react';
 import { Link } from 'react-router';
 import { createCategory, deleteCategory, listCategories, renameCategory } from '../services/categories';
 import { countProducts, UNCATEGORIZED } from '../services/products';
+import { useRole } from '../shop/ShopContext';
 import type { CategoryWithCount } from '../types';
 
 // Categories + how many products have no category, loaded together
@@ -15,6 +16,7 @@ function productCount(n: number) {
 }
 
 export function CategoriesPage() {
+  const { isOwner } = useRole(); // only owners add / rename / delete
   const [categories, setCategories] = useState<CategoryWithCount[]>([]);
   const [uncategorized, setUncategorized] = useState(0); // products without a category
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,7 @@ export function CategoriesPage() {
             Group your products, e.g. Beverages or Snacks. {categories.length} {categories.length === 1 ? 'category' : 'categories'}.
           </p>
         </div>
-        {!adding && (
+        {isOwner && !adding && (
           <button className="btn btn-primary" onClick={openAdd}>
             <span aria-hidden>+</span> Add category
           </button>
@@ -111,7 +113,9 @@ export function CategoriesPage() {
 
           {categories.length === 0 && !adding && (
             <li className="px-4 py-12 text-center text-sm text-slate-500">
-              No categories yet. Click <span className="font-medium text-slate-700">Add category</span> to create your first one.
+              {isOwner
+                ? <>No categories yet. Click <span className="font-medium text-slate-700">Add category</span> to create your first one.</>
+                : 'No categories yet. The shop owner adds categories.'}
             </li>
           )}
 
@@ -134,10 +138,12 @@ export function CategoriesPage() {
                     {c.product_count > 0 && <span className="text-indigo-600 opacity-0 group-hover:opacity-100"> · View products →</span>}
                   </p>
                 </Link>
-                <div className="shrink-0 whitespace-nowrap">
-                  <button className="btn btn-ghost" onClick={() => { setAdding(false); setEditingId(c.id); }}>Rename</button>
-                  <button className="btn btn-danger" onClick={() => handleDelete(c)}>Delete</button>
-                </div>
+                {isOwner && (
+                  <div className="shrink-0 whitespace-nowrap">
+                    <button className="btn btn-ghost" onClick={() => { setAdding(false); setEditingId(c.id); }}>Rename</button>
+                    <button className="btn btn-danger" onClick={() => handleDelete(c)}>Delete</button>
+                  </div>
+                )}
               </li>
             ),
           )}
