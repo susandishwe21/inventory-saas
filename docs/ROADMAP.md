@@ -57,13 +57,13 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** When signed out, visiting `/products` redirects to `/login`. Register → login → see products → logout → redirected to login. The session survives a page refresh.
 
-## Phase 4 — Organizations and onboarding
+## Phase 4 — Organizations and onboarding ✅
 
 **Goal:** Every signed-in user belongs to exactly one shop.
 
 - **DB:**
   - `organizations (id, name, created_at)`.
-  - `memberships (user_id unique → auth.users, org_id, role 'owner'|'staff', email, created_at)`. `unique(user_id)` enforces one org per user. `email` is copied from the JWT so other members can show it, because the client cannot read `auth.users`.
+  - `memberships (user_id unique → auth.users, org_id, role 'owner'|'staff', email, created_at)`. *Built with `user_id` as the primary key (same effect as unique) and `on delete cascade`; `role` is the enum `org_role`.* `unique(user_id)` enforces one org per user. `email` is copied from the JWT so other members can show it, because the client cannot read `auth.users`.
   - Helper functions `current_org_id()` and `is_owner()` (`security definer`, `stable`) that read `memberships` for `auth.uid()`. All later RLS policies use these, so no policy queries `memberships` directly and policies don't recurse.
   - RPC `create_organization(name)` creates the org plus an owner membership in one transaction.
   - RLS: users can read their own org and the memberships in their org. Rows are only inserted via the RPC.
@@ -71,7 +71,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** A new user is forced through onboarding exactly once, and calling the RPC a second time fails. In the SQL editor, `memberships` has one owner row for that user.
 
-## Phase 5 — Tenant-scoped products and movements (data reset)
+## Phase 5 — Tenant-scoped products and movements (data reset) ✅
+
+*Done. `schema.sql` was rewritten in its final, ordered, idempotent form (the whole file can be re-run). Same-shop rules use composite foreign keys (`(category_id, org_id)`, `(product_id, org_id)`). Image paths now start with `org_id` and storage policies limit each shop to its own folder (the Phase 10b follow-up). The opening-stock field was removed from the create form. `seed.sql` fills the oldest owner's shop (or one chosen by email).*
 
 **Goal:** Products and movements belong to an organization, and shops can't see each other's data.
 
@@ -86,7 +88,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** Create two users with two shops. Each sees only their own products and movements, and the same SKU can exist in both shops. A direct `update products set stock_quantity = …` from the client is rejected. A stock `out` larger than the stock on hand fails with a readable error.
 
-## Phase 6 — Invite codes and members
+## Phase 6 — Invite codes and members ✅
+
+*Done. Codes are 8 characters without look-alikes (shown as `XXXX-XXXX`), generated from `gen_random_uuid()` bytes. `join_organization` locks the invite row (`for update`) and gives one error message for wrong, used and expired codes. Removing staff is a `memberships` delete policy (owner, same shop, `role = 'staff'`) instead of an RPC. A removed user is sent to onboarding on their next page load. Staff see the members list but not the owner controls (a plain role check; Phase 7 adds `useRole()` and RLS).*
 
 **Goal:** Owners can bring staff into their shop.
 
@@ -159,7 +163,7 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Goal:** The products table handles hundreds of rows.
 
-- **DB:** Index on `products (org_id, name)`. *Not added yet: `org_id` arrives in Phase 5, so add this index there.*
+- **DB:** Index on `products (org_id, name)`. *Added in Phase 5.*
 - **UI:** Server-side pagination: 10 rows per page using `.range()` and `count: 'exact'`. Show "Showing 11–20 of 22" with Previous/Next buttons. Keep the page number in the URL (`?page=2`); invalid or too-high pages redirect to a valid one.
 
 **Verify:** Seed about 20+ products. Each page is correct, refresh keeps the page, and the Network tab shows only 10 rows fetched.

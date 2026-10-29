@@ -10,7 +10,7 @@ const DUPLICATE = 'A category with this name already exists.';
 export async function listCategories(): Promise<CategoryWithCount[]> {
   const { data, error } = await supabase
     .from('categories')
-    .select('id, name, created_at, products(count)') // products(count) = count products by category_id
+    .select('id, org_id, name, created_at, products(count)') // products(count) = count products by category_id
     .order('name');
   if (error) throw friendlyError(error);
 

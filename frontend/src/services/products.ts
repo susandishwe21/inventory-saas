@@ -51,19 +51,24 @@ export async function countProducts(category: CategoryFilter = null): Promise<nu
   return count ?? 0;
 }
 
-// Create a new product in the database and return its id (needed to upload its image)
-export async function createProduct(input: ProductInput): Promise<string> {
-  const { data, error } = await supabase.from('products').insert(input).select('id').single();
+// What setProductImage needs to know about a product
+export type ProductImageTarget = Pick<Product, 'id' | 'org_id' | 'image_path'>;
+
+// Create a new product (the database fills in org_id) and return what's needed to upload its image.
+// Stock starts at 0; opening stock is recorded afterwards as an "in" movement.
+export async function createProduct(input: ProductInput): Promise<ProductImageTarget> {
+  const { data, error } = await supabase.from('products').insert(input).select('id, org_id, image_path').single();
   if (error) throw friendlyError(error, DUPLICATE_SKU);
-  return data.id as string;
+  return data as ProductImageTarget;
 }
 
 // Apply the image change from the product form: upload / remove, then save image_path
-export async function setProductImage(productId: string, oldPath: string | null, change: ImageChange): Promise<void> {
+export async function setProductImage(product: ProductImageTarget, change: ImageChange): Promise<void> {
   if (change.type === 'keep') return;
 
-  const newPath = change.type === 'set' ? await uploadProductImage(productId, change.image) : null;
-  const { error } = await supabase.from('products').update({ image_path: newPath }).eq('id', productId);
+  const oldPath = product.image_path;
+  const newPath = change.type === 'set' ? await uploadProductImage(product.org_id, product.id, change.image) : null;
+  const { error } = await supabase.from('products').update({ image_path: newPath }).eq('id', product.id);
   if (error) {
     if (newPath) await deleteProductImage(newPath).catch(() => {}); // undo the upload
     throw friendlyError(error);
@@ -85,9 +90,13 @@ export async function deleteProduct(id: string): Promise<void> {
   const imagePath = data?.[0]?.image_path as string | null | undefined;
   if (imagePath) await deleteProductImage(imagePath).catch(() => {}); // product is gone either way
 }
-// Define the types for stock movements
+// Record a stock movement. The database trigger applies it to products.stock_quantity.
 export async function addStockMovement(input: StockMovementInput): Promise<void> {
   const { error } = await supabase.from('stock_movements').insert(input);
+  // 23514 = check constraint: stock_quantity would go below 0
+  if (error?.code === '23514' && error.message.includes('stock_quantity')) {
+    throw new Error('Not enough stock: this would make the stock less than 0.');
+  }
   if (error) throw friendlyError(error);
 }
 

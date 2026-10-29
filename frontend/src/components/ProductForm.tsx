@@ -25,7 +25,6 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '');
-  const [stockQuantity, setStockQuantity] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [imageChange, setImageChange] = useState<ImageChange>({ type: 'keep' });
   const [localPreview, setLocalPreview] = useState<string | null>(null); // blob: URL of a newly picked image
@@ -85,10 +84,8 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
     setError(null);
 
     const priceNum = Number(price);
-    const stockNum = Number(stockQuantity);
     if (!name.trim() || !sku.trim()) return setError('Name and SKU are required.');
     if (Number.isNaN(priceNum) || priceNum < 0) return setError('Price must be 0 or more.');
-    if (!isEdit && (!Number.isInteger(stockNum) || stockNum < 0)) return setError('Stock quantity must be a whole number, 0 or more.');
 
     const input: ProductInput = {
       name: name.trim(),
@@ -96,8 +93,6 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
       price: priceNum,
       category_id: categoryId || null, // '' = "No category"
     };
-    // Stock is only set when creating; after that it changes through stock movements
-    if (!isEdit) input.stock_quantity = stockNum;
 
     setSaving(true);
     try {
@@ -162,17 +157,12 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
           <span className="label">Price</span>
           <input className="input" placeholder="0.00" type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
         </label>
-        {!isEdit && (
-          <label>
-            <span className="label">Opening stock</span>
-            <input className="input" placeholder="0" type="number" step="1" min="0" value={stockQuantity} onChange={(e) => setStockQuantity(e.target.value)} />
-          </label>
-        )}
       </div>
 
-      {isEdit && (
-        <p className="mt-4 text-xs text-slate-500">To change stock, use the <span className="font-medium">Stock</span> button in the table.</p>
-      )}
+      <p className="mt-4 text-xs text-slate-500">
+        {isEdit ? 'To change stock' : 'New products start with 0 in stock. To add opening stock after saving'}, use the{' '}
+        <span className="font-medium">Stock</span> button in the table.
+      </p>
 
       {error && <p className="alert-error mt-4">{error}</p>}
 

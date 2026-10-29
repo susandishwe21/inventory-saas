@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { Icon } from '../components/icons';
 import { Sidebar } from '../components/Sidebar';
+import { useShop } from '../shop/ShopContext';
 
 // Page shell: sidebar on the left, the current page (<Outlet />) on the right
 export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false); // mobile only
+  const { shop } = useShop();
 
   return (
     <div className="min-h-screen">
@@ -37,7 +39,7 @@ export function AppLayout() {
           <button className="btn btn-ghost -ml-2" onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <Icon name="menu" />
           </button>
-          <span className="font-semibold tracking-tight">Inventory</span>
+          <span className="truncate font-semibold tracking-tight">{shop?.organization.name}</span>
         </div>
 
         <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">

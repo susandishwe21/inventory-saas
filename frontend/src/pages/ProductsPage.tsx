@@ -123,11 +123,11 @@ export function ProductsPage() {
     if (editing) {
       // If the image fails, the form stays open with the error and Save can simply be pressed again
       await updateProduct(editing.id, input);
-      await setProductImage(editing.id, editing.image_path, image);
+      await setProductImage(editing, image);
     } else {
-      const id = await createProduct(input);
+      const created = await createProduct(input);
       try {
-        await setProductImage(id, null, image);
+        await setProductImage(created, image);
       } catch (e) {
         // The product already exists: close the form, otherwise Save again would hit "SKU already exists"
         closeForm();

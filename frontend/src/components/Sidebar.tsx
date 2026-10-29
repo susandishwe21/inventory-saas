@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { signOut } from '../services/auth';
+import { useShop } from '../shop/ShopContext';
 import { Icon, type IconName } from './icons';
 
 type NavItem = { to: string; label: string; icon: IconName };
@@ -31,13 +32,20 @@ type Props = {
 };
 
 export function Sidebar({ onNavigate }: Props) {
+  const { shop } = useShop();
+
   return (
     <nav className="flex h-full flex-col gap-6 overflow-y-auto border-r border-slate-200 bg-white px-4 py-5">
       <div className="flex items-center gap-2.5 px-2">
         <span className="grid size-8 place-items-center rounded-lg bg-indigo-600 text-white">
           <Icon name="products" className="size-5" />
         </span>
-        <span className="text-base font-semibold tracking-tight">Inventory</span>
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold tracking-tight" title={shop?.organization.name}>
+            {shop?.organization.name}
+          </p>
+          <p className="text-xs text-slate-500">Inventory</p>
+        </div>
       </div>
 
       {GROUPS.map((group) => (
@@ -64,6 +72,7 @@ export function Sidebar({ onNavigate }: Props) {
 // Who is signed in, plus the logout button
 function UserMenu() {
   const { session } = useAuth();
+  const { shop } = useShop();
   const [error, setError] = useState<string | null>(null);
 
   async function handleLogout() {
@@ -80,6 +89,7 @@ function UserMenu() {
       <p className="truncate px-2 text-xs text-slate-500" title={session?.user.email}>
         {session?.user.email}
       </p>
+      <p className="px-2 text-xs font-medium text-slate-400 capitalize">{shop?.role}</p>
       <button
         type="button"
         onClick={handleLogout}

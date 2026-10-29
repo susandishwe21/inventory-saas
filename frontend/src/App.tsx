@@ -2,14 +2,39 @@ import { createBrowserRouter, Navigate } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { AuthProvider } from './auth/AuthProvider';
 import { RequireAuth } from './components/RequireAuth';
+import { RequireShop } from './components/RequireShop';
 import { AppLayout } from './layouts/AppLayout';
 import { AuthLayout } from './layouts/AuthLayout';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { OnboardingPage } from './pages/OnboardingPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { ShopProvider } from './shop/ShopProvider';
+
+// The pages inside the app shell (sidebar + <Outlet />)
+const appPages = [
+  { path: '/', element: <Navigate to="/dashboard" replace /> },
+  {
+    path: '/dashboard',
+    element: <PlaceholderPage title="Dashboard" description="Stock value and in/low/out of stock at a glance." phase={9} />,
+  },
+  { path: '/products', element: <ProductsPage /> },
+  { path: '/categories', element: <CategoriesPage /> },
+  {
+    path: '/suppliers',
+    element: <PlaceholderPage title="Suppliers" description="Know where each product comes from." phase={11} />,
+  },
+  {
+    path: '/history',
+    element: <PlaceholderPage title="Stock history" description="Every stock in, stock out and adjustment in your shop." phase={16} />,
+  },
+  { path: '/settings', element: <SettingsPage /> },
+  { path: '*', element: <NotFoundPage /> },
+];
 
 const router = createBrowserRouter([
   // Public: login and register (signed-in users are sent on to the app)
@@ -20,33 +45,18 @@ const router = createBrowserRouter([
       { path: '/register', element: <RegisterPage /> },
     ],
   },
-  // Everything else needs a signed-in user, and renders inside AppLayout (sidebar + <Outlet />)
+  // Everything else: signed in → shop loaded → (onboarding | app pages)
   {
     element: <RequireAuth />,
     children: [
       {
-        element: <AppLayout />,
+        element: <ShopProvider />,
         children: [
-          { path: '/', element: <Navigate to="/dashboard" replace /> },
+          { path: '/onboarding', element: <OnboardingPage /> }, // signed in, no shop yet
           {
-            path: '/dashboard',
-            element: <PlaceholderPage title="Dashboard" description="Stock value and in/low/out of stock at a glance." phase={9} />,
+            element: <RequireShop />,
+            children: [{ element: <AppLayout />, children: appPages }],
           },
-          { path: '/products', element: <ProductsPage /> },
-          { path: '/categories', element: <CategoriesPage /> },
-          {
-            path: '/suppliers',
-            element: <PlaceholderPage title="Suppliers" description="Know where each product comes from." phase={11} />,
-          },
-          {
-            path: '/history',
-            element: <PlaceholderPage title="Stock history" description="Every stock in, stock out and adjustment in your shop." phase={16} />,
-          },
-          {
-            path: '/settings',
-            element: <PlaceholderPage title="Settings" description="Your shop and team members." phase={6} />,
-          },
-          { path: '*', element: <NotFoundPage /> },
         ],
       },
     ],

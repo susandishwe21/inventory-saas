@@ -15,10 +15,11 @@ export function productImageUrl(path: string): string {
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-// Upload to "<productId>/<random>.webp" and return that path.
+// Upload to "<orgId>/<productId>/<random>.webp" and return that path.
+// The first folder is the shop: storage policies only allow writing in your own shop's folder.
 // A new random name every time, so browsers never show an old cached picture.
-export async function uploadProductImage(productId: string, image: Blob): Promise<string> {
-  const path = `${productId}/${crypto.randomUUID()}.${EXTENSIONS[image.type] ?? 'jpg'}`;
+export async function uploadProductImage(orgId: string, productId: string, image: Blob): Promise<string> {
+  const path = `${orgId}/${productId}/${crypto.randomUUID()}.${EXTENSIONS[image.type] ?? 'jpg'}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, image, {
     contentType: image.type,
     cacheControl: '31536000', // 1 year: the file at this path never changes
