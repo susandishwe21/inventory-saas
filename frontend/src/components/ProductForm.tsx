@@ -3,7 +3,8 @@ import { Link } from 'react-router';
 import { resizeImage } from '../lib/resizeImage';
 import { listCategories } from '../services/categories';
 import { productImageUrl } from '../services/productImages';
-import type { Category, ImageChange, Product, ProductInput } from '../types';
+import { listSuppliers } from '../services/suppliers';
+import type { Category, ImageChange, Product, ProductInput, Supplier } from '../types';
 import { ProductImage } from './ProductImage';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -28,15 +29,21 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
   const [lowStockLevel, setLowStockLevel] = useState(initial ? String(initial.low_stock_level) : '10');
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? '');
   const [categories, setCategories] = useState<Category[]>([]);
+  const [supplierId, setSupplierId] = useState(initial?.supplier_id ?? '');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [imageChange, setImageChange] = useState<ImageChange>({ type: 'keep' });
   const [localPreview, setLocalPreview] = useState<string | null>(null); // blob: URL of a newly picked image
   const [processingImage, setProcessingImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Options for the Category and Supplier selects
   useEffect(() => {
-    listCategories()
-      .then(setCategories)
+    Promise.all([listCategories(), listSuppliers()])
+      .then(([categoryList, supplierList]) => {
+        setCategories(categoryList);
+        setSuppliers(supplierList);
+      })
       .catch((e: Error) => setError(e.message));
   }, []);
 
@@ -102,6 +109,7 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
       cost_price: costNum,
       low_stock_level: levelNum,
       category_id: categoryId || null, // '' = "No category"
+      supplier_id: supplierId || null, // '' = "No supplier"
     };
 
     setSaving(true);
@@ -160,6 +168,20 @@ export function ProductForm({ initial, onSave, onCancel }: Props) {
           {categories.length === 0 && (
             <span className="mt-1 block text-xs text-slate-500">
               No categories yet. <Link to="/categories" className="font-medium text-indigo-600 hover:text-indigo-500">Create one</Link>
+            </span>
+          )}
+        </label>
+        <label>
+          <span className="label">Supplier</span>
+          <select className="input" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">No supplier</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {suppliers.length === 0 && (
+            <span className="mt-1 block text-xs text-slate-500">
+              No suppliers yet. <Link to="/suppliers" className="font-medium text-indigo-600 hover:text-indigo-500">Add one</Link>
             </span>
           )}
         </label>

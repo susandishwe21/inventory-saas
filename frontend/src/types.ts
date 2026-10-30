@@ -9,6 +9,23 @@ export type CategoryWithCount = Category & {
   product_count: number;
 };
 
+// Where products come from. Everything except the name is optional.
+export type Supplier = {
+  id: string;
+  org_id: string;
+  name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+};
+
+export type SupplierWithCount = Supplier & {
+  product_count: number;
+};
+
+export type SupplierInput = Pick<Supplier, 'name' | 'contact_name' | 'email' | 'phone'>;
+
 // Calculated by the database: out = 0, low = at or below low_stock_level, otherwise in
 export type StockStatus = 'in' | 'low' | 'out';
 
@@ -25,6 +42,8 @@ export type Product = {
   status: StockStatus; // read only: generated column
   category_id: string | null;
   category: Pick<Category, 'id' | 'name'> | null; // joined from categories when listing
+  supplier_id: string | null;
+  supplier: Pick<Supplier, 'id' | 'name'> | null; // joined from suppliers when listing
   image_path: string | null; // file path in the "product-images" storage bucket
   created_at: string;
 };
@@ -42,6 +61,7 @@ export type ProductInput = {
   cost_price: number;
   low_stock_level: number;
   category_id: string | null;
+  supplier_id: string | null;
 };
 
 export type MovementType = 'in' | 'out' | 'adjustment';

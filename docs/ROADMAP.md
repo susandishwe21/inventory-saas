@@ -156,7 +156,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** Upload, replace and remove work, and the old file is gone from Storage after replace/remove/delete. A 5 MB file or a PDF is rejected with a clear message. Products without images show the placeholder.
 
-## Phase 11 — Suppliers
+## Phase 11 — Suppliers ✅
+
+*Done. `suppliers` sits next to `categories` in `schema.sql` with the same rules (`unique (id, org_id)`, unique `(org_id, lower(name))`, `owners:` write policies). `products.supplier_id` uses a composite FK `(supplier_id, org_id)`, added in a `do $$ … duplicate_object` block so the file re-runs. Each supplier on the Suppliers page links to `/products?supplier=<id>`; Products has a Supplier filter (`?supplier=<id>` or `?supplier=none`) that combines with the category filter. `listProducts` / `countProducts` take a `ProductFilters` object. `seed.sql` adds 3 suppliers linked by SKU prefix.*
 
 **Goal:** Know where each product comes from.
 
@@ -174,7 +176,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** Seed about 20+ products. Each page is correct, refresh keeps the page, and the Network tab shows only 10 rows fetched.
 
-## Phase 13 — Products search
+## Phase 13 — Products search ✅
+
+*Done. `ProductFilters.search` adds `.or(name.ilike…, sku.ilike…)`. The value is LIKE-escaped (`%` `_` `\` match themselves) and wrapped in double quotes (`"` and `\` escaped), so `,` `(` `)` can't split the filter; tested against PostgREST with `a,b(`, `)`, quotes, backslash, `50%`, `a_b`. `SearchBox` debounces 300 ms, writes `?q=` with `replace` (no history entry per pause), resets to page 1, and follows the URL when it changes from outside. Search combines with the category and supplier filters.*
 
 **Goal:** Find a product by name or SKU.
 
@@ -185,7 +189,7 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 ## Phase 14 — Status and category filters (category half ✅ done early as 14a)
 
-*Done early (14a): category filter on Products (`?category=<id>` or `?category=none`), combined with pagination, and links from each category on the Categories page, including an "Uncategorized" row. Still to do here: the status filter (needs Phase 8) and combining with search (Phase 13).*
+*Done early (14a): category filter on Products (`?category=<id>` or `?category=none`), combined with pagination, and links from each category on the Categories page, including an "Uncategorized" row. The supplier filter was added with Phase 11. Search (Phase 13) already combines with both. Still to do here: the status filter.*
 
 **Goal:** Narrow the table down.
 

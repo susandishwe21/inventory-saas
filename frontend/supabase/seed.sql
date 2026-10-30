@@ -71,12 +71,38 @@ set cost_price = s.cost
 from seed_products s, seed_shop shop
 where p.org_id = shop.org_id and p.sku = s.sku and p.cost_price = 0;
 
+-- 4. Three sample suppliers, linked to the sample products by SKU prefix (stationery has no supplier).
+-- Products that already have a supplier are left alone.
+insert into suppliers (org_id, name, contact_name, email, phone)
+select shop.org_id, v.name, v.contact_name, v.email, v.phone
+from seed_shop shop
+cross join (values
+  ('Golden Beverage Co.',    'Ko Aung',    'orders@goldenbev.example',  '09 111 222 333'),
+  ('Yangon Snack Trading',   'Ma Thida',   'sales@ygnsnack.example',    '09 444 555 666'),
+  ('CleanHome Distributors', 'U Kyaw Min', 'hello@cleanhome.example',   '09 777 888 999')
+) as v(name, contact_name, email, phone)
+on conflict do nothing; -- skip names that already exist in this shop
+
+update products p
+set supplier_id = sup.id
+from seed_shop shop, suppliers sup
+where p.org_id = shop.org_id
+  and sup.org_id = shop.org_id
+  and p.supplier_id is null
+  and sup.name = case split_part(p.sku, '-', 1)
+    when 'BEV' then 'Golden Beverage Co.'
+    when 'SNK' then 'Yangon Snack Trading'
+    when 'HOM' then 'CleanHome Distributors'
+    when 'PER' then 'CleanHome Distributors'
+  end;
+
 -- Show which shop got the data (last, so the SQL Editor displays it).
 -- The temp tables disappear when the session ends, and the next run drops them first.
 select o.name as shop,
        count(p.id) as products,
        count(*) filter (where p.status = 'low') as low_stock,
-       count(*) filter (where p.status = 'out') as out_of_stock
+       count(*) filter (where p.status = 'out') as out_of_stock,
+       count(p.supplier_id) as with_supplier
 from seed_shop s
 join organizations o on o.id = s.org_id
 left join products p on p.org_id = o.id

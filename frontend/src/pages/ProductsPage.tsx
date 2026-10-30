@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 import { Pagination } from '../components/Pagination';
+import { SearchBox } from '../components/SearchBox';
 import { ProductForm } from '../components/ProductForm';
 import { StockPanel } from '../components/StockPanel';
 import { StockStatusPill } from '../components/StockStatusPill';
 import { listCategories } from '../services/categories';
+import { listSuppliers } from '../services/suppliers';
 import { ProductImage } from '../components/ProductImage';
 import { productImageUrl } from '../services/productImages';
 import { useRole } from '../shop/ShopContext';
-import { createProduct, deleteProduct, listProducts, setProductImage, UNCATEGORIZED, updateProduct } from '../services/products';
-import type { Category, ImageChange, Product, ProductInput } from '../types';
+import { createProduct, deleteProduct, listProducts, NO_SUPPLIER, setProductImage, UNCATEGORIZED, updateProduct } from '../services/products';
+import type { Category, ImageChange, Product, ProductInput, Supplier } from '../types';
 
 const PAGE_SIZE = 10;
 
@@ -24,11 +26,14 @@ export function ProductsPage() {
   const { isOwner } = useRole(); // staff only record stock; owners also add / edit / delete
   const page = parsePage(searchParams.get('page'));
   const category = searchParams.get('category'); // null = all, 'none' = uncategorized, otherwise a category id
-  const query = `${page}|${category}`; // what is being shown: page + filter
+  const supplier = searchParams.get('supplier'); // null = all, 'none' = no supplier, otherwise a supplier id
+  const search = searchParams.get('q') ?? ''; // part of the name or SKU
+  const query = `${page}|${category}|${supplier}|${search}`; // what is being shown: page + filters
 
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadedQuery, setLoadedQuery] = useState<string | null>(null); // which page + filter `products` belongs to
   const [loading, setLoading] = useState(true); // first load only
   const [error, setError] = useState<string | null>(null);
@@ -36,16 +41,16 @@ export function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [stockProductId, setStockProductId] = useState<string | null>(null);
 
-  // Load the page whenever ?page= or ?category= changes. State is only set inside .then/.catch.
+  // Load the page whenever ?page=, ?category=, ?supplier= or ?q= changes. State is only set inside .then/.catch.
   useEffect(() => {
     let ignore = false; // if the user clicks Next quickly, ignore the older, slower response
-    listProducts(page, PAGE_SIZE, category)
+    listProducts(page, PAGE_SIZE, { category, supplier, search })
       .then((result) => {
         if (ignore) return;
         setError(null);
         setProducts(result.products);
         setTotal(result.total);
-        setLoadedQuery(`${page}|${category}`);
+        setLoadedQuery(`${page}|${category}|${supplier}|${search}`);
       })
       .catch((e: Error) => {
         if (!ignore) setError(e.message);
@@ -56,19 +61,22 @@ export function ProductsPage() {
     return () => {
       ignore = true;
     };
-  }, [page, category]);
+  }, [page, category, supplier, search]);
 
-  // Categories for the filter dropdown
+  // Categories and suppliers for the filter dropdowns
   useEffect(() => {
-    listCategories()
-      .then(setCategories)
+    Promise.all([listCategories(), listSuppliers()])
+      .then(([categoryList, supplierList]) => {
+        setCategories(categoryList);
+        setSuppliers(supplierList);
+      })
       .catch((e: Error) => setError(e.message));
   }, []);
 
   // Reload the current page after add / edit / delete / stock movement
   async function load() {
     try {
-      const result = await listProducts(page, PAGE_SIZE, category);
+      const result = await listProducts(page, PAGE_SIZE, { category, supplier, search });
       setError(null);
       setProducts(result.products);
       setTotal(result.total);
@@ -78,25 +86,45 @@ export function ProductsPage() {
   }
 
   // Change one URL param and keep the others (e.g. keep ?category= when changing page)
-  function updateParams(change: (params: URLSearchParams) => void) {
+  // replace = true: don't add a browser history entry (used while typing a search)
+  function updateParams(change: (params: URLSearchParams) => void, replace = false) {
     closeForm();
     setStockProductId(null);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       change(next);
       return next;
-    });
+    }, { replace });
   }
 
   function goToPage(p: number) {
     updateParams((params) => (p === 1 ? params.delete('page') : params.set('page', String(p))));
   }
 
-  function changeCategory(value: string) {
+  // '' = all (removes the param from the URL)
+  function changeFilter(name: 'category' | 'supplier', value: string) {
     updateParams((params) => {
       params.delete('page'); // new filter → back to page 1
-      if (value) params.set('category', value);
-      else params.delete('category');
+      if (value) params.set(name, value);
+      else params.delete(name);
+    });
+  }
+
+  function changeSearch(text: string) {
+    if (text === search) return; // e.g. only a space was added
+    updateParams((params) => {
+      params.delete('page'); // new search → back to page 1
+      if (text) params.set('q', text);
+      else params.delete('q');
+    }, true);
+  }
+
+  function clearFilters() {
+    updateParams((params) => {
+      params.delete('page');
+      params.delete('category');
+      params.delete('supplier');
+      params.delete('q');
     });
   }
 
@@ -177,10 +205,12 @@ export function ProductsPage() {
 
   const switchingPage = loadedQuery !== query; // old rows stay visible (dimmed) until the new page arrives
 
-  // Name of the selected category, for the header ("7 products in Beverages")
+  // Names of the selected filters, for the header ("6 products in Beverages from Golden Beverage Co.")
   const categoryName = category === UNCATEGORIZED
     ? 'Uncategorized'
     : categories.find((c) => c.id === category)?.name;
+  const supplierName = suppliers.find((s) => s.id === supplier)?.name;
+  const filtered = Boolean(category || supplier || search);
 
   return (
     <>
@@ -189,9 +219,11 @@ export function ProductsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
           <p className="mt-1 text-sm text-slate-500">
             {total} {total === 1 ? 'product' : 'products'}{' '}
-            {category
-              ? <>in <span className="font-medium text-slate-700">{categoryName ?? 'this category'}</span></>
-              : 'in your inventory'}
+            {category && <>in <span className="font-medium text-slate-700">{categoryName ?? 'this category'}</span> </>}
+            {supplier === NO_SUPPLIER && 'with no supplier'}
+            {supplier && supplier !== NO_SUPPLIER && <>from <span className="font-medium text-slate-700">{supplierName ?? 'this supplier'}</span></>}
+            {search && <> matching <span className="font-medium text-slate-700">"{search}"</span></>}
+            {!filtered && 'in your inventory'}
           </p>
         </div>
         {isOwner && !showForm && (
@@ -225,9 +257,10 @@ export function ProductsPage() {
         <div className="card overflow-hidden">
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-3">
+            <SearchBox value={search} onSearch={changeSearch} placeholder="Search name or SKU" />
             <label className="flex items-center gap-2 text-sm">
               <span className="font-medium text-slate-700">Category</span>
-              <select className="input w-auto py-1.5" value={category ?? ''} onChange={(e) => changeCategory(e.target.value)}>
+              <select className="input w-auto py-1.5" value={category ?? ''} onChange={(e) => changeFilter('category', e.target.value)}>
                 <option value="">All categories</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -235,9 +268,19 @@ export function ProductsPage() {
                 <option value={UNCATEGORIZED}>Uncategorized</option>
               </select>
             </label>
-            {category && (
-              <button className="btn btn-ghost" onClick={() => changeCategory('')}>
-                <span aria-hidden>✕</span> Clear filter
+            <label className="flex items-center gap-2 text-sm">
+              <span className="font-medium text-slate-700">Supplier</span>
+              <select className="input w-auto py-1.5" value={supplier ?? ''} onChange={(e) => changeFilter('supplier', e.target.value)}>
+                <option value="">All suppliers</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+                <option value={NO_SUPPLIER}>No supplier</option>
+              </select>
+            </label>
+            {filtered && (
+              <button className="btn btn-ghost" onClick={clearFilters}>
+                <span aria-hidden>✕</span> Clear filters
               </button>
             )}
           </div>
@@ -249,6 +292,7 @@ export function ProductsPage() {
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">SKU</th>
                   <th className="px-4 py-3">Category</th>
+                  <th className="px-4 py-3">Supplier</th>
                   <th className="px-4 py-3 text-right">Price</th>
                   <th className="px-4 py-3 text-right">Stock</th>
                   <th className="px-4 py-3">Status</th>
@@ -258,11 +302,11 @@ export function ProductsPage() {
               <tbody className="divide-y divide-slate-100">
                 {total === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
-                      {category ? (
+                    <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                      {filtered ? (
                         <>
-                          No products in this category.{' '}
-                          <button className="font-medium text-indigo-600 hover:text-indigo-500" onClick={() => changeCategory('')}>
+                          {search && !category && !supplier ? <>No products match "{search}".</> : 'No products match these filters.'}{' '}
+                          <button className="font-medium text-indigo-600 hover:text-indigo-500" onClick={clearFilters}>
                             Show all products
                           </button>
                         </>
@@ -287,6 +331,9 @@ export function ProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {p.category ? p.category.name : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {p.supplier ? p.supplier.name : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{p.price.toFixed(2)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{p.stock_quantity}</td>

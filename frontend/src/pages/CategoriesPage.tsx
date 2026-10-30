@@ -7,7 +7,7 @@ import type { CategoryWithCount } from '../types';
 
 // Categories + how many products have no category, loaded together
 async function loadAll() {
-  const [categories, uncategorized] = await Promise.all([listCategories(), countProducts(UNCATEGORIZED)]);
+  const [categories, uncategorized] = await Promise.all([listCategories(), countProducts({ category: UNCATEGORIZED })]);
   return { categories, uncategorized };
 }
 

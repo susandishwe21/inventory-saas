@@ -12,29 +12,51 @@ export type ProductPage = {
   total: number; // number of products in the whole table, not just this page
 };
 
-// Category filter: null = all products, UNCATEGORIZED = products without a category, otherwise a category id
+// Filter values in the URL: missing = all products, 'none' = products without one, otherwise an id
 export const UNCATEGORIZED = 'none';
-export type CategoryFilter = string | null;
+export const NO_SUPPLIER = 'none';
 
-// select() on products, filtered by category
-function productsQuery(columns: string, options: { count: 'exact'; head?: boolean }, category: CategoryFilter) {
-  const query = supabase.from('products').select(columns, options);
-  if (category === UNCATEGORIZED) return query.is('category_id', null);
-  if (category) return query.eq('category_id', category);
+export type ProductFilters = {
+  category?: string | null; // a category id, UNCATEGORIZED, or null for all
+  supplier?: string | null; // a supplier id, NO_SUPPLIER, or null for all
+  search?: string | null; // part of the name or SKU, any case
+};
+
+// Turn what the user typed into a safe PostgREST value for "name or SKU contains this text".
+// 1. LIKE wildcards: % and _ in the text should match themselves, so escape them with \.
+// 2. Double quotes let the value contain , ( ) which otherwise split the .or() filter;
+//    inside the quotes, \ and " must be escaped with \ too.
+function containsPattern(text: string): string {
+  const like = `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  return `"${like.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
+}
+
+// select() on products with the filters applied (they combine with AND)
+function productsQuery(columns: string, options: { count: 'exact'; head?: boolean }, filters: ProductFilters) {
+  let query = supabase.from('products').select(columns, options);
+  if (filters.category === UNCATEGORIZED) query = query.is('category_id', null);
+  else if (filters.category) query = query.eq('category_id', filters.category);
+  if (filters.supplier === NO_SUPPLIER) query = query.is('supplier_id', null);
+  else if (filters.supplier) query = query.eq('supplier_id', filters.supplier);
+  const search = filters.search?.trim();
+  if (search) {
+    const pattern = containsPattern(search);
+    query = query.or(`name.ilike.${pattern},sku.ilike.${pattern}`);
+  }
   return query;
 }
 
 // List one page of products (page starts at 1). The database only sends these rows.
-export async function listProducts(page: number, pageSize: number, category: CategoryFilter = null): Promise<ProductPage> {
+export async function listProducts(page: number, pageSize: number, filters: ProductFilters = {}): Promise<ProductPage> {
   const from = (page - 1) * pageSize;
-  const { data, error, count } = await productsQuery('*, category:categories(id, name)', { count: 'exact' }, category) // also fetch the category name
+  const { data, error, count } = await productsQuery('*, category:categories(id, name), supplier:suppliers(id, name)', { count: 'exact' }, filters) // also fetch category and supplier names
     .order('name')
     .order('id') // tie-breaker: products with the same name keep a fixed order between pages
     .range(from, from + pageSize - 1);
 
   // Page is past the end (e.g. ?page=99): return no rows but the real total
   if (error?.code === 'PGRST103') {
-    return { products: [], total: await countProducts(category) };
+    return { products: [], total: await countProducts(filters) };
   }
   if (error) throw friendlyError(error);
 
@@ -46,8 +68,8 @@ export async function listProducts(page: number, pageSize: number, category: Cat
 }
 
 // Count products without downloading any rows
-export async function countProducts(category: CategoryFilter = null): Promise<number> {
-  const { count, error } = await productsQuery('*', { count: 'exact', head: true }, category);
+export async function countProducts(filters: ProductFilters = {}): Promise<number> {
+  const { count, error } = await productsQuery('*', { count: 'exact', head: true }, filters);
   if (error) throw friendlyError(error);
   return count ?? 0;
 }

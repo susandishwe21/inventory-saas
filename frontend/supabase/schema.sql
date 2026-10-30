@@ -5,8 +5,8 @@
 --
 -- Order matters: shops first, because the other tables use current_org_id() as a default.
 --   1. Shops (organizations, memberships, helper functions)
---   2. Categories
---   3. Products
+--   2. Categories and suppliers
+--   3. Products (each with an optional category and supplier)
 --   4. Stock movements + the trigger that applies them to products.stock_quantity
 --   5. Column privileges (what the app may write)
 --   6. Row level security policies
@@ -101,6 +101,19 @@ create table if not exists categories (
 );
 create unique index if not exists categories_org_name_key on categories (org_id, lower(name)); -- "Snacks" = "snacks", per shop
 
+-- Suppliers: where products come from (one optional supplier per product). Same rules as categories.
+create table if not exists suppliers (
+  id           uuid primary key default gen_random_uuid(),
+  org_id       uuid not null default current_org_id() references organizations(id) on delete cascade,
+  name         text not null check (length(trim(name)) > 0),
+  contact_name text, -- person to talk to
+  email        text,
+  phone        text,
+  created_at   timestamptz not null default now(),
+  unique (id, org_id) -- lets products check "supplier is in the same shop"
+);
+create unique index if not exists suppliers_org_name_key on suppliers (org_id, lower(name)); -- one "ABC Foods" per shop
+
 
 -- =====================================================================
 -- 3. Products
@@ -140,6 +153,15 @@ alter table products add column if not exists
       else 'in'
     end
   ) stored;
+
+-- Phase 11: optional supplier, from the same shop (like category_id). Deleting a supplier only clears supplier_id.
+alter table products add column if not exists supplier_id uuid;
+do $$ begin
+  alter table products add constraint products_supplier_same_shop_fkey
+    foreign key (supplier_id, org_id) references suppliers (id, org_id) on delete set null (supplier_id);
+exception when duplicate_object then null; -- already added on an earlier run
+end $$;
+create index if not exists products_supplier_id_idx on products (supplier_id);
 create index if not exists products_category_id_idx on products (category_id);
 
 
@@ -193,12 +215,15 @@ create trigger stock_movements_apply
 -- =====================================================================
 
 revoke insert, update on categories      from anon, authenticated;
+revoke insert, update on suppliers       from anon, authenticated;
 revoke insert, update on products        from anon, authenticated;
 revoke insert, update on stock_movements from anon, authenticated;
 
 grant insert (name), update (name) on categories to authenticated;
-grant insert (name, sku, price, cost_price, low_stock_level, category_id, image_path),
-      update (name, sku, price, cost_price, low_stock_level, category_id, image_path) on products to authenticated;
+grant insert (name, contact_name, email, phone),
+      update (name, contact_name, email, phone) on suppliers to authenticated;
+grant insert (name, sku, price, cost_price, low_stock_level, category_id, supplier_id, image_path),
+      update (name, sku, price, cost_price, low_stock_level, category_id, supplier_id, image_path) on products to authenticated;
 grant insert (product_id, type, quantity, note) on stock_movements to authenticated; -- no update: audit log
 
 
@@ -210,6 +235,7 @@ grant insert (product_id, type, quantity, note) on stock_movements to authentica
 alter table organizations   enable row level security;
 alter table memberships     enable row level security;
 alter table categories      enable row level security;
+alter table suppliers       enable row level security;
 alter table products        enable row level security;
 alter table stock_movements enable row level security;
 
@@ -242,6 +268,19 @@ create policy "owners: add categories"    on categories for insert to authentica
 create policy "owners: update categories" on categories for update to authenticated
   using (org_id = current_org_id() and is_owner()) with check (org_id = current_org_id() and is_owner());
 create policy "owners: delete categories" on categories for delete to authenticated
+  using (org_id = current_org_id() and is_owner());
+
+-- Suppliers: every member reads, only owners add / change / delete
+drop policy if exists "members: read suppliers"  on suppliers;
+drop policy if exists "owners: add suppliers"    on suppliers;
+drop policy if exists "owners: update suppliers" on suppliers;
+drop policy if exists "owners: delete suppliers" on suppliers;
+create policy "members: read suppliers"  on suppliers for select to authenticated using (org_id = current_org_id());
+create policy "owners: add suppliers"    on suppliers for insert to authenticated
+  with check (org_id = current_org_id() and is_owner());
+create policy "owners: update suppliers" on suppliers for update to authenticated
+  using (org_id = current_org_id() and is_owner()) with check (org_id = current_org_id() and is_owner());
+create policy "owners: delete suppliers" on suppliers for delete to authenticated
   using (org_id = current_org_id() and is_owner());
 
 drop policy if exists "members: read products"  on products;

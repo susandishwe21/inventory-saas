@@ -15,6 +15,7 @@ import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SuppliersPage } from './pages/SuppliersPage';
 import { ShopProvider } from './shop/ShopProvider';
 
 // The pages inside the app shell (sidebar + <Outlet />)
@@ -23,10 +24,7 @@ const appPages = [
   { path: '/dashboard', element: <DashboardPage /> },
   { path: '/products', element: <ProductsPage /> },
   { path: '/categories', element: <CategoriesPage /> },
-  {
-    path: '/suppliers',
-    element: <PlaceholderPage title="Suppliers" description="Know where each product comes from." phase={11} />,
-  },
+  { path: '/suppliers', element: <SuppliersPage /> },
   {
     path: '/history',
     element: <PlaceholderPage title="Stock history" description="Every stock in, stock out and adjustment in your shop." phase={16} />,
