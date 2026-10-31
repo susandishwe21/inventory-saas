@@ -8,10 +8,10 @@ import { AppLayout } from './layouts/AppLayout';
 import { AuthLayout } from './layouts/AuthLayout';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { HistoryPage } from './pages/HistoryPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OnboardingPage } from './pages/OnboardingPage';
-import { PlaceholderPage } from './pages/PlaceholderPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -25,10 +25,7 @@ const appPages = [
   { path: '/products', element: <ProductsPage /> },
   { path: '/categories', element: <CategoriesPage /> },
   { path: '/suppliers', element: <SuppliersPage /> },
-  {
-    path: '/history',
-    element: <PlaceholderPage title="Stock history" description="Every stock in, stock out and adjustment in your shop." phase={16} />,
-  },
+  { path: '/history', element: <HistoryPage /> },
   { element: <RequireOwner />, children: [{ path: '/settings', element: <SettingsPage /> }] }, // owners only
   { path: '*', element: <NotFoundPage /> },
 ];

@@ -187,9 +187,11 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** Partial and case-insensitive matches work on both fields. Input like `a,b(` doesn't break the query.
 
-## Phase 14 — Status and category filters (category half ✅ done early as 14a)
+## Phase 14 — Status and category filters ✅ (category half done early as 14a)
 
-*Done early (14a): category filter on Products (`?category=<id>` or `?category=none`), combined with pagination, and links from each category on the Categories page, including an "Uncategorized" row. The supplier filter was added with Phase 11. Search (Phase 13) already combines with both. Still to do here: the status filter.*
+*Done early (14a): category filter on Products (`?category=<id>` or `?category=none`), combined with pagination, and links from each category on the Categories page, including an "Uncategorized" row. The supplier filter was added with Phase 11. Search (Phase 13) already combines with both.*
+
+*Done. Status filter `?status=in|low|out` (unknown values are ignored) uses `.eq('status', …)` on the Phase 8 generated column and combines with search, category and supplier. The Dashboard's Low stock / Out of stock cards link to `/products?status=low|out`.*
 
 **Goal:** Narrow the table down.
 
@@ -198,7 +200,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** Every combination of search, status and category returns the right rows, and the pagination total matches the filtered count.
 
-## Phase 15 — CSV export
+## Phase 15 — CSV export ✅
+
+*Done. `listAllProducts(filters)` fetches 1000 rows per request with the same `name, id` order until a short chunk. `src/lib/csv.ts` quotes fields with `,` `"` or line breaks (inner quotes doubled), prefixes text starting with `= + - @` with `'` (CSV injection), uses CRLF line ends, and adds a UTF-8 BOM so Excel shows Burmese correctly. Owners and staff can export.*
 
 **Goal:** Download the products list.
 
@@ -207,7 +211,9 @@ Out of scope: orders, finance, customers, marketing, discounts, sales channels, 
 
 **Verify:** With filters applied, the CSV row count equals the table total. The file opens correctly in Excel or Google Sheets, including a product named `Cola, "Large"`.
 
-## Phase 16 — Stock history page
+## Phase 16 — Stock history page ✅
+
+*Done. Instead of looking up emails in `memberships` (which loses removed staff), `stock_movements.created_by_email` defaults to `auth.jwt() ->> 'email'` and is not in the column grant; older rows are back-filled from `memberships` (seed movements made in the SQL Editor stay empty). Index `stock_movements (org_id, created_at desc)`. `/history` filters by product, type and a local-date range (`from` inclusive, `to` = before the next midnight), 10 per page; each product links to `/products?q=<sku>`. `PlaceholderPage` was removed (no placeholder pages left); `Pagination` takes an `itemLabel`.*
 
 **Goal:** Audit every stock change in the shop.
 

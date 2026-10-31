@@ -188,6 +188,19 @@ create table if not exists stock_movements (
 );
 create index if not exists stock_movements_product_idx on stock_movements (product_id, created_at desc);
 
+-- Phase 16: who recorded it, as text. Copied from the login token when the movement is added,
+-- so the stock history still shows the email after a staff member is removed (audit log).
+-- Not in the column grant (section 5), so the app can't fake it.
+alter table stock_movements add column if not exists
+  created_by_email text default (auth.jwt() ->> 'email');
+-- Movements recorded before Phase 16: fill in the email from memberships (only empty ones, safe to re-run)
+update stock_movements m
+set created_by_email = mem.email
+from memberships mem
+where m.created_by = mem.user_id and m.created_by_email is null;
+-- Stock history page: one shop's movements, newest first
+create index if not exists stock_movements_org_created_idx on stock_movements (org_id, created_at desc);
+
 -- Apply every new movement to products.stock_quantity.
 -- "security definer": the app itself may not write stock_quantity (see column privileges), only this trigger.
 -- Selling more than is in stock breaks check (stock_quantity >= 0), so the movement is rejected too.

@@ -3,9 +3,10 @@ type Props = {
   pageSize: number;
   total: number; // all rows, not just this page
   onPageChange: (page: number) => void;
+  itemLabel?: string; // what is being counted, e.g. "movements"
 };
 
-export function Pagination({ page, pageSize, total, onPageChange }: Props) {
+export function Pagination({ page, pageSize, total, onPageChange, itemLabel = 'products' }: Props) {
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
@@ -14,7 +15,7 @@ export function Pagination({ page, pageSize, total, onPageChange }: Props) {
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm">
       <p className="text-slate-500">
         Showing <span className="font-medium text-slate-900 tabular-nums">{from}–{to}</span> of{' '}
-        <span className="font-medium text-slate-900 tabular-nums">{total}</span> products
+        <span className="font-medium text-slate-900 tabular-nums">{total}</span> {itemLabel}
       </p>
 
       <div className="flex items-center gap-2">

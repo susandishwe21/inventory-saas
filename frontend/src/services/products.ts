@@ -1,7 +1,7 @@
 // Call the supabase client (database)
 
 import { supabase } from '../lib/supabase';
-import type { ImageChange, Product, ProductInput, StockMovement, StockMovementInput } from '../types';
+import type { ImageChange, Product, ProductInput, StockMovement, StockMovementInput, StockStatus } from '../types';
 import { friendlyError, requireChanged } from './errors';
 import { deleteProductImage, uploadProductImage } from './productImages';
 
@@ -20,6 +20,7 @@ export type ProductFilters = {
   category?: string | null; // a category id, UNCATEGORIZED, or null for all
   supplier?: string | null; // a supplier id, NO_SUPPLIER, or null for all
   search?: string | null; // part of the name or SKU, any case
+  status?: StockStatus | null; // 'in' / 'low' / 'out', or null for all
 };
 
 // Turn what the user typed into a safe PostgREST value for "name or SKU contains this text".
@@ -32,12 +33,13 @@ function containsPattern(text: string): string {
 }
 
 // select() on products with the filters applied (they combine with AND)
-function productsQuery(columns: string, options: { count: 'exact'; head?: boolean }, filters: ProductFilters) {
+function productsQuery(columns: string, options: { count?: 'exact'; head?: boolean }, filters: ProductFilters) {
   let query = supabase.from('products').select(columns, options);
   if (filters.category === UNCATEGORIZED) query = query.is('category_id', null);
   else if (filters.category) query = query.eq('category_id', filters.category);
   if (filters.supplier === NO_SUPPLIER) query = query.is('supplier_id', null);
   else if (filters.supplier) query = query.eq('supplier_id', filters.supplier);
+  if (filters.status) query = query.eq('status', filters.status); // generated column from Phase 8
   const search = filters.search?.trim();
   if (search) {
     const pattern = containsPattern(search);
@@ -46,10 +48,18 @@ function productsQuery(columns: string, options: { count: 'exact'; head?: boolea
   return query;
 }
 
+// Every product column, plus the category and supplier names
+const PRODUCT_COLUMNS = '*, category:categories(id, name), supplier:suppliers(id, name)';
+
+// numeric columns arrive as strings, so turn them into numbers
+function toProducts(data: unknown): Product[] {
+  return ((data ?? []) as Product[]).map((p) => ({ ...p, price: Number(p.price), cost_price: Number(p.cost_price) }));
+}
+
 // List one page of products (page starts at 1). The database only sends these rows.
 export async function listProducts(page: number, pageSize: number, filters: ProductFilters = {}): Promise<ProductPage> {
   const from = (page - 1) * pageSize;
-  const { data, error, count } = await productsQuery('*, category:categories(id, name), supplier:suppliers(id, name)', { count: 'exact' }, filters) // also fetch category and supplier names
+  const { data, error, count } = await productsQuery(PRODUCT_COLUMNS, { count: 'exact' }, filters)
     .order('name')
     .order('id') // tie-breaker: products with the same name keep a fixed order between pages
     .range(from, from + pageSize - 1);
@@ -60,11 +70,23 @@ export async function listProducts(page: number, pageSize: number, filters: Prod
   }
   if (error) throw friendlyError(error);
 
-  return {
-    // numeric columns arrive as strings, so turn them into numbers
-    products: (data as unknown as Product[] ?? []).map((p) => ({ ...p, price: Number(p.price), cost_price: Number(p.cost_price) })),
-    total: count ?? 0,
-  };
+  return { products: toProducts(data), total: count ?? 0 };
+}
+
+const EXPORT_CHUNK = 1000; // Supabase sends at most 1000 rows per request
+
+// Every product matching the filters (for CSV export), fetched 1000 at a time
+export async function listAllProducts(filters: ProductFilters = {}): Promise<Product[]> {
+  const all: Product[] = [];
+  for (let from = 0; ; from += EXPORT_CHUNK) {
+    const { data, error } = await productsQuery(PRODUCT_COLUMNS, {}, filters)
+      .order('name')
+      .order('id') // same fixed order as the table, so chunks don't overlap or skip rows
+      .range(from, from + EXPORT_CHUNK - 1);
+    if (error) throw friendlyError(error);
+    all.push(...toProducts(data));
+    if (data.length < EXPORT_CHUNK) return all; // last chunk
+  }
 }
 
 // Count products without downloading any rows

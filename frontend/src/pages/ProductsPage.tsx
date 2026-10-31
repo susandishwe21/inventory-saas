@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
 import { Pagination } from '../components/Pagination';
+import { downloadCsv, toCsv } from '../lib/csv';
 import { SearchBox } from '../components/SearchBox';
 import { ProductForm } from '../components/ProductForm';
 import { StockPanel } from '../components/StockPanel';
@@ -10,10 +11,21 @@ import { listSuppliers } from '../services/suppliers';
 import { ProductImage } from '../components/ProductImage';
 import { productImageUrl } from '../services/productImages';
 import { useRole } from '../shop/ShopContext';
-import { createProduct, deleteProduct, listProducts, NO_SUPPLIER, setProductImage, UNCATEGORIZED, updateProduct } from '../services/products';
-import type { Category, ImageChange, Product, ProductInput, Supplier } from '../types';
+import { createProduct, deleteProduct, listAllProducts, listProducts, NO_SUPPLIER, setProductImage, UNCATEGORIZED, updateProduct } from '../services/products';
+import type { Category, ImageChange, Product, ProductInput, StockStatus, Supplier } from '../types';
 
 const PAGE_SIZE = 10;
+
+const STATUS_OPTIONS: { value: StockStatus; label: string }[] = [
+  { value: 'in', label: 'In stock' },
+  { value: 'low', label: 'Low stock' },
+  { value: 'out', label: 'Out of stock' },
+];
+
+// "?status=low" → 'low'. Missing or unknown ("?status=abc") → null (all)
+function parseStatus(raw: string | null): StockStatus | null {
+  return STATUS_OPTIONS.some((o) => o.value === raw) ? (raw as StockStatus) : null;
+}
 
 // "?page=2" → 2. Missing or invalid ("abc", "0", "-1") → 1
 function parsePage(raw: string | null): number {
@@ -28,7 +40,8 @@ export function ProductsPage() {
   const category = searchParams.get('category'); // null = all, 'none' = uncategorized, otherwise a category id
   const supplier = searchParams.get('supplier'); // null = all, 'none' = no supplier, otherwise a supplier id
   const search = searchParams.get('q') ?? ''; // part of the name or SKU
-  const query = `${page}|${category}|${supplier}|${search}`; // what is being shown: page + filters
+  const status = parseStatus(searchParams.get('status'));
+  const query = `${page}|${category}|${supplier}|${search}|${status}`; // what is being shown: page + filters
 
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -40,17 +53,19 @@ export function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [stockProductId, setStockProductId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  // Load the page whenever ?page=, ?category=, ?supplier= or ?q= changes. State is only set inside .then/.catch.
+  // Load the page whenever ?page= or a filter (?category=, ?supplier=, ?q=, ?status=) changes.
+  // State is only set inside .then/.catch.
   useEffect(() => {
     let ignore = false; // if the user clicks Next quickly, ignore the older, slower response
-    listProducts(page, PAGE_SIZE, { category, supplier, search })
+    listProducts(page, PAGE_SIZE, { category, supplier, search, status })
       .then((result) => {
         if (ignore) return;
         setError(null);
         setProducts(result.products);
         setTotal(result.total);
-        setLoadedQuery(`${page}|${category}|${supplier}|${search}`);
+        setLoadedQuery(`${page}|${category}|${supplier}|${search}|${status}`);
       })
       .catch((e: Error) => {
         if (!ignore) setError(e.message);
@@ -61,7 +76,7 @@ export function ProductsPage() {
     return () => {
       ignore = true;
     };
-  }, [page, category, supplier, search]);
+  }, [page, category, supplier, search, status]);
 
   // Categories and suppliers for the filter dropdowns
   useEffect(() => {
@@ -76,7 +91,7 @@ export function ProductsPage() {
   // Reload the current page after add / edit / delete / stock movement
   async function load() {
     try {
-      const result = await listProducts(page, PAGE_SIZE, { category, supplier, search });
+      const result = await listProducts(page, PAGE_SIZE, { category, supplier, search, status });
       setError(null);
       setProducts(result.products);
       setTotal(result.total);
@@ -102,7 +117,7 @@ export function ProductsPage() {
   }
 
   // '' = all (removes the param from the URL)
-  function changeFilter(name: 'category' | 'supplier', value: string) {
+  function changeFilter(name: 'category' | 'supplier' | 'status', value: string) {
     updateParams((params) => {
       params.delete('page'); // new filter → back to page 1
       if (value) params.set(name, value);
@@ -124,6 +139,7 @@ export function ProductsPage() {
       params.delete('page');
       params.delete('category');
       params.delete('supplier');
+      params.delete('status');
       params.delete('q');
     });
   }
@@ -183,6 +199,34 @@ export function ProductsPage() {
     }
   }
 
+  // Download every product that matches the current filters (not just this page) as a CSV file
+  async function handleExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      const all = await listAllProducts({ category, supplier, search, status });
+      const csv = toCsv([
+        ['Name', 'SKU', 'Category', 'Supplier', 'Cost price', 'Selling price', 'Stock', 'Low-stock level', 'Status'],
+        ...all.map((p) => [
+          p.name,
+          p.sku,
+          p.category?.name,
+          p.supplier?.name,
+          p.cost_price.toFixed(2),
+          p.price.toFixed(2),
+          p.stock_quantity,
+          p.low_stock_level,
+          STATUS_OPTIONS.find((o) => o.value === p.status)?.label,
+        ]),
+      ]);
+      downloadCsv(`products-${new Date().toLocaleDateString('en-CA')}.csv`, csv); // en-CA date = 2026-10-30
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // id နဲ့ list ထဲက နောက်ဆုံး data ကို ရှာတယ်
   const stockProduct = products.find((p) => p.id === stockProductId);
 
@@ -210,7 +254,8 @@ export function ProductsPage() {
     ? 'Uncategorized'
     : categories.find((c) => c.id === category)?.name;
   const supplierName = suppliers.find((s) => s.id === supplier)?.name;
-  const filtered = Boolean(category || supplier || search);
+  const filtered = Boolean(category || supplier || search || status);
+  const statusLabel = STATUS_OPTIONS.find((o) => o.value === status)?.label;
 
   return (
     <>
@@ -223,14 +268,20 @@ export function ProductsPage() {
             {supplier === NO_SUPPLIER && 'with no supplier'}
             {supplier && supplier !== NO_SUPPLIER && <>from <span className="font-medium text-slate-700">{supplierName ?? 'this supplier'}</span></>}
             {search && <> matching <span className="font-medium text-slate-700">"{search}"</span></>}
+            {statusLabel && <> · <span className="font-medium text-slate-700">{statusLabel}</span></>}
             {!filtered && 'in your inventory'}
           </p>
         </div>
-        {isOwner && !showForm && (
-          <button className="btn btn-primary" onClick={openAdd}>
-            <span aria-hidden>+</span> Add product
+        <div className="flex gap-3">
+          <button className="btn btn-secondary" onClick={handleExport} disabled={exporting || total === 0}>
+            {exporting ? 'Exporting…' : 'Export CSV'}
           </button>
-        )}
+          {isOwner && !showForm && (
+            <button className="btn btn-primary" onClick={openAdd}>
+              <span aria-hidden>+</span> Add product
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="space-y-6">
@@ -278,6 +329,15 @@ export function ProductsPage() {
                 <option value={NO_SUPPLIER}>No supplier</option>
               </select>
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="font-medium text-slate-700">Status</span>
+              <select className="input w-auto py-1.5" value={status ?? ''} onChange={(e) => changeFilter('status', e.target.value)}>
+                <option value="">All</option>
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
             {filtered && (
               <button className="btn btn-ghost" onClick={clearFilters}>
                 <span aria-hidden>✕</span> Clear filters
@@ -305,7 +365,7 @@ export function ProductsPage() {
                     <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
                       {filtered ? (
                         <>
-                          {search && !category && !supplier ? <>No products match "{search}".</> : 'No products match these filters.'}{' '}
+                          {search && !category && !supplier && !status ? <>No products match "{search}".</> : 'No products match these filters.'}{' '}
                           <button className="font-medium text-indigo-600 hover:text-indigo-500" onClick={clearFilters}>
                             Show all products
                           </button>

@@ -49,8 +49,8 @@ export function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Stock value" value={formatMoney(summary.stock_value)} hint="Cost price × stock, all products" />
         <StatCard label="Products" value={total.toLocaleString()} />
-        <StatCard label="Low stock" value={summary.low_stock.toLocaleString()} dot="bg-amber-400" />
-        <StatCard label="Out of stock" value={summary.out_of_stock.toLocaleString()} dot="bg-red-600" />
+        <StatCard label="Low stock" value={summary.low_stock.toLocaleString()} dot="bg-amber-400" to="/products?status=low" />
+        <StatCard label="Out of stock" value={summary.out_of_stock.toLocaleString()} dot="bg-red-600" to="/products?status=out" />
       </div>
 
       <section className="card mt-6 p-5">
@@ -104,17 +104,25 @@ type StatCardProps = {
   value: string;
   hint?: string;
   dot?: string; // color class of a small status dot next to the label
+  to?: string; // makes the card a link, e.g. to the filtered products list
 };
 
-function StatCard({ label, value, hint, dot }: StatCardProps) {
-  return (
-    <div className="card p-5">
+function StatCard({ label, value, hint, dot, to }: StatCardProps) {
+  const content = (
+    <>
       <p className="flex items-center gap-2 text-sm text-slate-500">
         {dot && <span className={`size-2.5 rounded-full ${dot}`} aria-hidden />}
         {label}
       </p>
       <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
-    </div>
+      {to && <p className="mt-1 text-xs text-indigo-600 opacity-0 group-hover:opacity-100">View products →</p>}
+    </>
+  );
+  if (!to) return <div className="card p-5">{content}</div>;
+  return (
+    <Link to={to} className="group card block p-5 transition-colors hover:border-indigo-300">
+      {content}
+    </Link>
   );
 }

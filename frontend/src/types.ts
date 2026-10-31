@@ -74,6 +74,7 @@ export type StockMovement = {
   quantity: number;
   note: string | null;
   created_by: string | null; // user id of who recorded it
+  created_by_email: string | null; // their email, kept even if they are removed from the shop
   created_at: string;
 };
 
